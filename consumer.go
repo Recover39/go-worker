@@ -133,6 +133,18 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 			log.Println("error:", err)
 		}
 
+		//route request
+		switch action {
+		case `threadLike`, `threadUnlike`, `threadReport`, `threadBlock`:
+			simpleThreadRequest(d.Body)
+		case `commentAdd`:
+			addComment(d.Body)
+		case `commentLike`, `commentUnlike`, `commentReport`, `commentBlock`:
+			simpleCommentRequest(d.Body)
+		default:
+			log.Printf("unknown actionType")
+		}
+
 		log.Printf("%s", d.Body)
 	}
 
@@ -145,12 +157,20 @@ func simpleThreadRequest(msg []byte) {
 		Thread_id string `json:"thread_id"`
 		User      string `json:"user"`
 		Action    string `json:"action"`
+		Time      int64  `json:"time"`
 	}
 
 	var request Request
 	err := json.Unmarshal(msg, &request)
 	if err != nil {
 		log.Println("error:", err)
+	}
+
+	switch request.Action {
+	case `threadLike`:
+	case `threadUnlike`:
+	case `threadReport`:
+	case `threadBlock`:
 	}
 
 	fmt.Printf("%+v", request)
@@ -160,16 +180,28 @@ func simpleThreadRequest(msg []byte) {
 	// log.Printf("%v",request)
 }
 
+func addComment(msg []byte) {
+
+}
+
 func simpleCommentRequest(msg []byte) {
 	type Request struct {
 		Comment_id string `json:"comment_id"`
 		User       string `json:"user"`
 		Action     string `json:"action"`
+		Time       int64  `json:"time"`
 	}
 
 	var request Request
 	err := json.Unmarshal(msg, &request)
 	if err != nil {
 		log.Println("error:", err)
+	}
+
+	switch request.Action {
+	case `commentLike`:
+	case `commentUnlike`:
+	case `commentReport`:
+	case `commentBlock`:
 	}
 }
