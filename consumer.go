@@ -137,10 +137,18 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 		switch action {
 		case `threadLike`, `threadUnlike`, `threadReport`, `threadBlock`:
 			simpleThreadRequest(d.Body)
+
 		case `commentAdd`:
 			addComment(d.Body)
+
 		case `commentLike`, `commentUnlike`, `commentReport`, `commentBlock`:
 			simpleCommentRequest(d.Body)
+
+		case `newThread`:
+
+		case `newThread_textOnly`:
+			newThreadTextOnly(d.Body)
+
 		default:
 			log.Printf("unknown actionType")
 		}
@@ -173,15 +181,24 @@ func simpleThreadRequest(msg []byte) {
 	case `threadBlock`:
 	}
 
-	fmt.Printf("%+v", request)
-
-	// log.Printf("thread_id : %s, user : %s, action : %s",
-	//     request.thread_id, request.user, request.action)
-	// log.Printf("%v",request)
+	log.Println("%+v", request)
 }
 
 func addComment(msg []byte) {
+	type Request struct {
+		Comment_id string `json:"comment_id"`
+		User       string `json:"user"`
+		Content    string `json:"content"`
+		Time       int64  `json:"time"`
+	}
 
+	var request Request
+	err := json.Unmarshal(msg, &request)
+	if err != nil {
+		log.Println("error:", err)
+	}
+
+	log.Println("%+v", request)
 }
 
 func simpleCommentRequest(msg []byte) {
@@ -204,4 +221,41 @@ func simpleCommentRequest(msg []byte) {
 	case `commentReport`:
 	case `commentBlock`:
 	}
+
+	log.Println("%+v", request)
+}
+
+func newThreadTextOnly(msg []byte) {
+	type Request struct {
+		Author  string `json:"auther"`
+		Public  string `json:"is_public"`
+		Content string `json:"content"`
+		Time    int64  `json:"time"`
+	}
+
+	var request Request
+	err := json.Unmarshal(msg, &request)
+	if err != nil {
+		log.Println("error:", err)
+	}
+
+	log.Println("%+v", request)
+}
+
+func newThread(msg []byte) {
+	type Request struct {
+		Author  string `json:"auther"`
+		Public  string `json:"is_public"`
+		Content string `json:"content"`
+		Photo   string `json:"photh"`
+		Time    int64  `json:"time"`
+	}
+
+	var request Request
+	err := json.Unmarshal(msg, &request)
+	if err != nil {
+		log.Println("error:", err)
+	}
+
+	log.Println("%+v", request)
 }
