@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/couchbaselabs/go-couchbase"
 	"github.com/streadway/amqp"
 	"log"
 	//"database/sql"
@@ -15,8 +16,9 @@ import (
 )
 
 var (
-	uri   = flag.String("uri", "amqp://admin:password@localhost:5672/", "AMQP URI")
-	queue = flag.String("queue", "queue", "Ephemeral AMQP queue name")
+	rabbitmqURI  = flag.String("uri", "amqp://admin:password@localhost:5672/", "AMQP URI")
+	queueName    = flag.String("queue", "requestQueue", "queue name")
+	couchbaseURI = flag.String("couchbase", "http://125.209.198.141", "couchbase URI")
 )
 
 func init() {
@@ -24,7 +26,7 @@ func init() {
 }
 
 func main() {
-	c, err := NewConsumer(*uri, *queue)
+	c, err := NewConsumer(*rabbitmqURI, *queueName)
 	if err != nil {
 		log.Fatalf("%s", err)
 	}
@@ -42,7 +44,6 @@ func main() {
 type Consumer struct {
 	conn    *amqp.Connection
 	channel *amqp.Channel
-	tag     string
 	done    chan error
 }
 
@@ -154,11 +155,46 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 			log.Printf("unknown actionType")
 		}
 
-		log.Printf("%s", d.Body)
+		d.Ack(false)
 	}
 
 	log.Printf("handle: deliveries channel closed")
 	done <- nil
+}
+
+type Couch struct {
+	conn *couchbase.Client
+	pool *couchbase.Pool
+}
+
+//function return couchBaseConnection
+func couchBaseConn(couchbaseURI, bucketName string) (*Couch, error) {
+	c := &Couch{
+		conn: nil,
+		pool: nil,
+	}
+
+	var err error
+
+	c.conn, err = couchbase.Connect(couchbaseURI)
+	if err != nil {
+		return nil, fmt.Errorf("Error connecting:  %v", err)
+	}
+
+	c.pool, err = c.GetPool("default")
+	if err != nil {
+		return nil, fmt.Errorf("Error getting pool:  %v", err)
+	}
+
+	return c, nil
+}
+
+func insertCouchbase() error {
+
+}
+
+func updateCouchbase() error {
+
 }
 
 func simpleThreadRequest(msg []byte) {
