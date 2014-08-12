@@ -124,17 +124,17 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 	for d := range deliveries {
 		//check request actionType
 		type ActionType struct {
-			action string
+			Action string `json:"action"`
 		}
 
-		var action ActionType
-		err := json.Unmarshal(d.Body, &action)
+		var actionType ActionType
+		err := json.Unmarshal(d.Body, &actionType)
 		if err != nil {
 			log.Println("error:", err)
 		}
 
 		//route request
-		switch action {
+		switch actionType.Action {
 		case `threadLike`, `threadUnlike`, `threadReport`, `threadBlock`:
 			simpleThreadRequest(d.Body)
 
@@ -145,6 +145,7 @@ func handle(deliveries <-chan amqp.Delivery, done chan error) {
 			simpleCommentRequest(d.Body)
 
 		case `newThread`:
+			newThread(d.Body)
 
 		case `newThread_textOnly`:
 			newThreadTextOnly(d.Body)
