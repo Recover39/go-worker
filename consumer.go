@@ -25,12 +25,12 @@ func init() {
 	flag.Parse()
 }
 
-type User struct {
-	Name string `json:"name"`
-	Id   string `json:"id"`
-}
-
 func main() {
+	//connect to couchbase to access data
+	//to use connection, use var couchConn
+	couchBaseConn(*couchbaseURL)
+
+	//connect to rabbitmq to get request
 	c, err := NewConsumer(*rabbitmqURI, *mainQueue)
 	if err != nil {
 		log.Fatalf("%s", err)
@@ -44,6 +44,32 @@ func main() {
 	if err := c.Shutdown(); err != nil {
 		log.Fatalf("error during shutdown: %s", err)
 	}
+}
+
+type Couch struct {
+	conn *couchbase.Client
+	pool *couchbase.Pool
+}
+
+//variable to store couchbase connection
+var couchConn Couch
+
+//function return couchBaseConnection
+func couchBaseConn(couchbaseURI string) error {
+	log.Printf("connecting to %q for couchbase", couchbaseURI)
+	conn, err := couchbase.Connect(couchbaseURI)
+	couchConn.conn = &conn
+	if err != nil {
+		return fmt.Errorf("Error getting connection: %s", err)
+	}
+
+	pool, err := couchConn.conn.GetPool("default")
+	couchConn.pool = &pool
+	if err != nil {
+		return fmt.Errorf("Error getting pool:  %s", err)
+	}
+
+	return nil
 }
 
 type Consumer struct {
@@ -160,34 +186,6 @@ func deliverHandle(deliveries <-chan amqp.Delivery, done chan error) {
 
 	log.Printf("handle: deliveries channel closed")
 	done <- nil
-}
-
-type Couch struct {
-	conn *couchbase.Client
-	pool *couchbase.Pool
-}
-
-//function return couchBaseConnection
-func couchBaseConn(couchbaseURI string) (*Couch, error) {
-	c := &Couch{
-		conn: nil,
-		pool: nil,
-	}
-
-	log.Printf("connecting to %q for couchbase", couchbaseURI)
-	conn, err := couchbase.Connect(couchbaseURI)
-	c.conn = &conn
-	if err != nil {
-		return nil, fmt.Errorf("Error getting connection: %s", err)
-	}
-
-	pool, err := c.conn.GetPool("default")
-	c.pool = &pool
-	if err != nil {
-		return nil, fmt.Errorf("Error getting pool:  %s", err)
-	}
-
-	return c, nil
 }
 
 func insertCouchbase() {
