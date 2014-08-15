@@ -17,16 +17,21 @@ import (
 
 var (
 	rabbitmqURI  = flag.String("uri", "amqp://admin:password@localhost:5672/", "AMQP URI")
-	queueName    = flag.String("queue", "requestQueue", "queue name")
-	couchbaseURI = flag.String("couchbase", "http://125.209.198.141", "couchbase URI")
+	mainQueue    = flag.String("queue", "requestQueue", "main queue name")
+	couchbaseURI = flag.String("couchbase", "http://125.209.198.141:8091/", "couchbase URI")
 )
 
 func init() {
 	flag.Parse()
 }
 
+type User struct {
+	Name string `json:"name"`
+	Id   string `json:"id"`
+}
+
 func main() {
-	c, err := NewConsumer(*rabbitmqURI, *queueName)
+	c, err := NewConsumer(*rabbitmqURI, *mainQueue)
 	if err != nil {
 		log.Fatalf("%s", err)
 	}
@@ -53,7 +58,6 @@ func NewConsumer(amqpURI, queueName string) (*Consumer, error) {
 		channel: nil,
 		done:    make(chan error),
 	}
-
 	var err error
 
 	log.Printf("dialing %q", amqpURI)
@@ -100,17 +104,13 @@ func NewConsumer(amqpURI, queueName string) (*Consumer, error) {
 		return nil, fmt.Errorf("Queue Consume: %s", err)
 	}
 
-	go handle(deliveries, c.done)
+	go deliverHandle(deliveries, c.done)
 
 	return c, nil
 }
 
 func (c *Consumer) Shutdown() error {
 	// will close() the deliveries channel
-	if err := c.channel.Cancel(c.tag, true); err != nil {
-		return fmt.Errorf("Consumer cancel failed: %s", err)
-	}
-
 	if err := c.conn.Close(); err != nil {
 		return fmt.Errorf("AMQP connection close error: %s", err)
 	}
@@ -121,7 +121,7 @@ func (c *Consumer) Shutdown() error {
 	return <-c.done
 }
 
-func handle(deliveries <-chan amqp.Delivery, done chan error) {
+func deliverHandle(deliveries <-chan amqp.Delivery, done chan error) {
 	for d := range deliveries {
 		//check request actionType
 		type ActionType struct {
@@ -168,32 +168,33 @@ type Couch struct {
 }
 
 //function return couchBaseConnection
-func couchBaseConn(couchbaseURI, bucketName string) (*Couch, error) {
+func couchBaseConn(couchbaseURI string) (*Couch, error) {
 	c := &Couch{
 		conn: nil,
 		pool: nil,
 	}
 
-	var err error
-
-	c.conn, err = couchbase.Connect(couchbaseURI)
+	log.Printf("connecting to %q for couchbase", couchbaseURI)
+	conn, err := couchbase.Connect(couchbaseURI)
+	c.conn = &conn
 	if err != nil {
-		return nil, fmt.Errorf("Error connecting:  %v", err)
+		return nil, fmt.Errorf("Error getting connection: %s", err)
 	}
 
-	c.pool, err = c.GetPool("default")
+	pool, err := c.conn.GetPool("default")
+	c.pool = &pool
 	if err != nil {
-		return nil, fmt.Errorf("Error getting pool:  %v", err)
+		return nil, fmt.Errorf("Error getting pool:  %s", err)
 	}
 
 	return c, nil
 }
 
-func insertCouchbase() error {
+func insertCouchbase() {
 
 }
 
-func updateCouchbase() error {
+func updateCouchbase() {
 
 }
 
