@@ -11,6 +11,7 @@ import (
 	"github.com/couchbaselabs/go-couchbase"
 	"github.com/streadway/amqp"
 	"log"
+	"strconv"
 	//"database/sql"
 	//_ "github.com/go-sql-driver/mysql"
 )
@@ -28,7 +29,7 @@ func init() {
 func main() {
 	//connect to couchbase to access data
 	//to use connection, use var couchConn
-	couchBaseConn(*couchbaseURL)
+	createCouchBaseConn(*couchbaseURI)
 
 	//connect to rabbitmq to get request
 	c, err := NewConsumer(*rabbitmqURI, *mainQueue)
@@ -55,7 +56,7 @@ type Couch struct {
 var couchConn Couch
 
 //function return couchBaseConnection
-func couchBaseConn(couchbaseURI string) error {
+func createCouchBaseConn(couchbaseURI string) error {
 	log.Printf("connecting to %q for couchbase", couchbaseURI)
 	conn, err := couchbase.Connect(couchbaseURI)
 	couchConn.conn = &conn
@@ -172,14 +173,13 @@ func deliverHandle(deliveries <-chan amqp.Delivery, done chan error) {
 			simpleCommentRequest(d.Body)
 
 		case `newThread`:
-			newThread(d.Body)
-
+			//newThread(d.Body, true)
 		case `newThread_textOnly`:
-			newThreadTextOnly(d.Body)
+			newThread(d.Body, false)
 
 		default:
 			log.Printf("unknown actionType")
-		}
+		}i
 
 		d.Ack(false)
 	}
@@ -196,6 +196,20 @@ func updateCouchbase() {
 
 }
 
+func increaseThreadNum() string {
+	bucket, err := couchConn.pool.GetBucket("Thread")
+	if err != nil {
+		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+	}
+
+	threadNum, err := bucket.Incr("ThreadNum", 1, 1, 0)
+	if err != nil {
+		log.Fatalf("Failed to get data from the cluster (%s)\n", err)
+	}
+
+	return strconv.FormatUint(threadNum, 10)
+}
+
 func simpleThreadRequest(msg []byte) {
 	type Request struct {
 		Thread_id string `json:"thread_id"`
@@ -204,20 +218,59 @@ func simpleThreadRequest(msg []byte) {
 		Time      int64  `json:"time"`
 	}
 
+	type Thread struct {
+		Id      string
+		Author  string   `json:"author"`
+		Public  string   `json:"is_public"`
+		Content string   `json:"content"`
+		Photo   string   `json:"photh"`
+		Time    int64    `json:"time"`
+		Like    []string `json:"like"`
+		Report  []string `json:"reportUser"`
+		Block   []string `json:"blockUser"`
+	}
+
 	var request Request
 	err := json.Unmarshal(msg, &request)
 	if err != nil {
 		log.Println("error:", err)
 	}
 
-	switch request.Action {
-	case `threadLike`:
-	case `threadUnlike`:
-	case `threadReport`:
-	case `threadBlock`:
+	bucket, err := couchConn.pool.GetBucket("Thread")
+	if err != nil {
+		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
-	log.Println("%+v", request)
+	thread := Thread{}
+
+	err = bucket.Get(request.Thread_id, &thread)
+	if err != nil {
+		log.Fatalf("Failed to get data from the cluster (%s)\n", err)
+	}
+
+	switch request.Action {
+	case `threadLike`:
+		thread.Like = append(thread.Like, request.User)
+	case `threadUnlike`:
+		for i, userName := range thread.Like {
+			if userName == request.User {
+				thread.Like = append(thread.Like[:i], thread.Like[i+1:]...)
+				break
+			}
+		}
+	case `threadReport`:
+		thread.Report = append(thread.Report, request.User)
+	case `threadBlock`:
+		thread.Block = append(thread.Block, request.User)
+	}
+
+	//update change
+	err = bucket.Set(thread.Id, 0, thread)
+	if err != nil {
+		log.Fatalf("Failed to write data to the cluster (%s)\n", err)
+	}
+
+	log.Println(request)
 }
 
 func addComment(msg []byte) {
@@ -234,7 +287,7 @@ func addComment(msg []byte) {
 		log.Println("error:", err)
 	}
 
-	log.Println("%+v", request)
+	log.Println(request)
 }
 
 func simpleCommentRequest(msg []byte) {
@@ -258,15 +311,21 @@ func simpleCommentRequest(msg []byte) {
 	case `commentBlock`:
 	}
 
-	log.Println("%+v", request)
+	log.Println(request)
 }
 
-func newThreadTextOnly(msg []byte) {
+//auto increment가 필요하다.
+func newThread(msg []byte, photo bool) {
 	type Request struct {
-		Author  string `json:"auther"`
-		Public  string `json:"is_public"`
-		Content string `json:"content"`
-		Time    int64  `json:"time"`
+		Id      string
+		Author  string   `json:"author"`
+		Public  string   `json:"is_public"`
+		Content string   `json:"content"`
+		Photo   string   `json:"photh"`
+		Time    int64    `json:"time"`
+		Like    []string `json:"like"`
+		Report  []string `json:"reportUser"`
+		Block   []string `json:"blockUser"`
 	}
 
 	var request Request
@@ -275,23 +334,25 @@ func newThreadTextOnly(msg []byte) {
 		log.Println("error:", err)
 	}
 
-	log.Println("%+v", request)
-}
+	log.Println(request)
 
-func newThread(msg []byte) {
-	type Request struct {
-		Author  string `json:"auther"`
-		Public  string `json:"is_public"`
-		Content string `json:"content"`
-		Photo   string `json:"photh"`
-		Time    int64  `json:"time"`
+	//fill request property
+	request.Id = increaseThreadNum()
+	if !photo {
+		request.Photo = "nil"
 	}
 
-	var request Request
-	err := json.Unmarshal(msg, &request)
+	bucket, err := couchConn.pool.GetBucket("Thread")
 	if err != nil {
-		log.Println("error:", err)
+		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
-	log.Println("%+v", request)
+	added, err := bucket.Add(request.Id, 0, request)
+	if err != nil {
+		log.Fatalf("Failed to write data to the cluster (%s)\n", err)
+	}
+
+	if !added {
+		log.Fatalf("A Document with the same id of (%s) already exists.\n", request.Id)
+	}
 }
