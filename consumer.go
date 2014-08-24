@@ -59,16 +59,17 @@ var couchConn Couch
 func createCouchBaseConn(couchbaseURI string) error {
 	log.Printf("connecting to %q for couchbase", couchbaseURI)
 	conn, err := couchbase.Connect(couchbaseURI)
-	couchConn.conn = &conn
 	if err != nil {
 		return fmt.Errorf("Error getting connection: %s", err)
 	}
 
-	pool, err := couchConn.conn.GetPool("default")
-	couchConn.pool = &pool
+	pool, err := conn.GetPool("default")
 	if err != nil {
 		return fmt.Errorf("Error getting pool:  %s", err)
 	}
+
+	couchConn.conn = &conn
+	couchConn.pool = &pool
 
 	return nil
 }
