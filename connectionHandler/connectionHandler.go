@@ -1,7 +1,6 @@
 package connectionHandler
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/couchbaselabs/go-couchbase"
@@ -11,11 +10,7 @@ import (
 	//_ "github.com/go-sql-driver/mysql"
 )
 
-var (
-	rabbitmqURI  = flag.String("uri", "amqp://admin:password@localhost:5672/", "AMQP URI")
-	mainQueue    = flag.String("queue", "requestQueue", "main queue name")
-	couchbaseURI = flag.String("couchbase", "http://125.209.198.141:8091/", "couchbase URI")
-)
+var couchbaseURI = flag.String("couchbase", "http://125.209.198.141:8091/", "couchbase URI")
 
 func init() {
 	flag.Parse()
@@ -40,12 +35,12 @@ func CreateCouchbaseConn(address string) (Couch, error) {
 	log.Printf("connecting to %q for couchbase", address)
 	conn, err := couchbase.Connect(address)
 	if err != nil {
-		return nil, fmt.Errorf("Error getting connection: %s", err)
+		return Couch{}, fmt.Errorf("Error getting connection: %s", err)
 	}
 
 	pool, err := conn.GetPool("default")
 	if err != nil {
-		return nil, fmt.Errorf("Error getting pool:  %s", err)
+		return Couch{}, fmt.Errorf("Error getting pool:  %s", err)
 	}
 
 	couchConn.conn = &conn
@@ -54,8 +49,10 @@ func CreateCouchbaseConn(address string) (Couch, error) {
 	return couchConn, nil
 }
 
+//문제가 있음
 func GetBucket(bucketname string) (*couchbase.Bucket, error) {
-	conn, err := couchbase.Connect(couchbaseURI)
+	log.Printf(*couchbaseURI)
+	conn, err := couchbase.Connect(*couchbaseURI)
 	if err != nil {
 		//log.Println("Make sure that couchbase is at", couchbaseURI)
 		return nil, fmt.Errorf("Error getting connection: %s", err)

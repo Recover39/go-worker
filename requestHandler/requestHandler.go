@@ -1,11 +1,12 @@
 package requestHandler
 
 import (
-	"./connectionHandler"
-	"./dataType"
+	"../connectionHandler"
+	"../dataType"
 	"encoding/json"
-	"fmt"
+	"github.com/streadway/amqp"
 	"log"
+	"strconv"
 	//"database/sql"
 	//_ "github.com/go-sql-driver/mysql"
 )
@@ -32,7 +33,7 @@ func RouteRequest(deliveries <-chan amqp.Delivery, done chan error) {
 			addComment(d.Body)
 
 		case `commentLike`, `commentUnlike`, `commentReport`, `commentHide`:
-			simpleCommentRequest(d.Body)
+			//simpleCommentRequest(d.Body)
 
 		case `newThread`:
 			//newThread(d.Body, true)
@@ -50,7 +51,7 @@ func RouteRequest(deliveries <-chan amqp.Delivery, done chan error) {
 	done <- nil
 }
 
-func IncreaseBucketKey(bucketName string) string {
+func increaseBucketKey(bucketName string) string {
 	bucket, err := connectionHandler.GetBucket(bucketName)
 	if err != nil {
 		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
@@ -143,7 +144,7 @@ func simpleThreadRequest(msg []byte) {
 		log.Println("error:", err)
 	}
 
-	var thread = dataType.Thread
+	var thread dataType.Thread
 
 	bucket, err := connectionHandler.GetBucket("Thread")
 	if err != nil {
