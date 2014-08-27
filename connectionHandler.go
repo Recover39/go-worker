@@ -1,4 +1,4 @@
-package main
+package connectionHandler
 
 import (
 	"encoding/json"
@@ -34,7 +34,6 @@ type Couch struct {
 	pool *couchbase.Pool
 }
 
-//function return couchBaseConnection
 func CreateCouchbaseConn(address string) (Couch, error) {
 	couchConn := Couch{}
 
@@ -55,7 +54,7 @@ func CreateCouchbaseConn(address string) (Couch, error) {
 	return couchConn, nil
 }
 
-func CreateBucket(bucketname string) (*couchbase.Bucket, error) {
+func GetBucket(bucketname string) (*couchbase.Bucket, error) {
 	conn, err := couchbase.Connect(couchbaseURI)
 	if err != nil {
 		//log.Println("Make sure that couchbase is at", couchbaseURI)

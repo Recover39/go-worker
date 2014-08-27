@@ -1,4 +1,4 @@
-package main
+package dataType
 
 type Thread struct {
 	Id      string
