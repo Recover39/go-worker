@@ -10,11 +10,7 @@ import (
 	//_ "github.com/go-sql-driver/mysql"
 )
 
-var couchbaseURI = flag.String("couchbase", "http://125.209.198.141:8091/", "couchbase URI")
-
-func init() {
-	flag.Parse()
-}
+var couchbaseURI = flag.String("couchbase", "http://10.73.45.71:8091/", "couchbase URI")
 
 type RabbitmqConsumer struct {
 	conn    *amqp.Connection
@@ -49,9 +45,8 @@ func CreateCouchbaseConn(address string) (Couch, error) {
 	return couchConn, nil
 }
 
-//문제가 있음
+//defer bucket.Close()
 func GetBucket(bucketname string) (*couchbase.Bucket, error) {
-	log.Printf(*couchbaseURI)
 	conn, err := couchbase.Connect(*couchbaseURI)
 	if err != nil {
 		//log.Println("Make sure that couchbase is at", couchbaseURI)

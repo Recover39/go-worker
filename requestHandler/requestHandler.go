@@ -33,7 +33,7 @@ func RouteRequest(deliveries <-chan amqp.Delivery, done chan error) {
 			addComment(d.Body)
 
 		case `commentLike`, `commentUnlike`, `commentReport`, `commentHide`:
-			//simpleCommentRequest(d.Body)
+			simpleCommentRequest(d.Body)
 
 		case `newThread`:
 			//newThread(d.Body, true)
@@ -61,8 +61,10 @@ func increaseBucketKey(bucketName string) string {
 
 	key, err := bucket.Incr(bucketKey, 1, 1, 0)
 	if err != nil {
-		log.Fatalf("Failed to get data from the cluster (%s)\n", err)
+		log.Fatalf("Failed to get bucketKey (%s)\n", err)
 	}
+
+	defer bucket.Close()
 
 	return strconv.FormatUint(key, 10)
 }
@@ -86,12 +88,20 @@ func newThread(msg []byte) {
 
 	added, err := bucket.Add(thread.Id, 0, thread)
 	if err != nil {
-		log.Fatalf("Failed to write data to the cluster (%s)\n", err)
+		log.Fatalf("Failed to write new thread (%s)\n", err)
 	}
 
 	if !added {
-		log.Fatalf("A Document with the same id of (%s) already exists.\n", thread.Id)
+		log.Fatalf("A Thread with the same id of (%s) already exists.\n", thread.Id)
 	}
+
+	var test dataType.Thread
+
+	err = bucket.Get(thread.Id, &test)
+
+	log.Printf("Got back a user with a name of (%s) and id (%s)\n", test.Id, test.Author)
+
+	defer bucket.Close()
 }
 
 func addComment(msg []byte) {
@@ -101,8 +111,6 @@ func addComment(msg []byte) {
 		log.Println("error:", err)
 	}
 
-	log.Println(comment)
-
 	comment.Id = increaseBucketKey("Comment")
 
 	commentBucket, err := connectionHandler.GetBucket("Comment")
@@ -111,10 +119,10 @@ func addComment(msg []byte) {
 	}
 	added, err := commentBucket.Add(comment.Id, 0, comment)
 	if err != nil {
-		log.Fatalf("Failed to write data to the cluster (%s)\n", err)
+		log.Fatalf("Failed to write new comment (%s)\n", err)
 	}
 	if !added {
-		log.Fatalf("A Document with the same id of (%s) already exists.\n", comment.Id)
+		log.Fatalf("A Comment with the same id of (%s) already exists.\n", comment.Id)
 	}
 
 	var thread dataType.Thread
@@ -125,7 +133,7 @@ func addComment(msg []byte) {
 	}
 	err = threadBucket.Get(comment.Thread_id, &thread)
 	if err != nil {
-		log.Fatalf("Failed to get data from the cluster (%s)\n", err)
+		log.Fatalf("Failed to get thread to add comment (%s)\n", err)
 	}
 
 	thread.Comment = append(thread.Comment, comment.Id)
@@ -133,8 +141,11 @@ func addComment(msg []byte) {
 	//update change
 	err = threadBucket.Set(thread.Id, 0, thread)
 	if err != nil {
-		log.Fatalf("Failed to write data to the cluster (%s)\n", err)
+		log.Fatalf("Failed to re-write thread to add comment (%s)\n", err)
 	}
+
+	defer commentBucket.Close()
+	defer threadBucket.Close()
 }
 
 func simpleThreadRequest(msg []byte) {
@@ -150,14 +161,23 @@ func simpleThreadRequest(msg []byte) {
 	if err != nil {
 		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
 	}
+
 	err = bucket.Get(request.Thread_id, &thread)
 	if err != nil {
-		log.Fatalf("Failed to get data from the cluster (%s)\n", err)
+		log.Fatalf("Failed to get thread to change property (%s)\n", err)
 	}
 
 	switch request.Action {
 	case `threadLike`:
-		thread.Like = append(thread.Like, request.User)
+		var exsitUser bool
+		for _, userName := range thread.Like {
+			if userName == request.User {
+				exsitUser = true
+			}
+		}
+		if exsitUser != true {
+			thread.Like = append(thread.Like, request.User)
+		}
 	case `threadUnlike`:
 		for i, userName := range thread.Like {
 			if userName == request.User {
@@ -166,17 +186,33 @@ func simpleThreadRequest(msg []byte) {
 			}
 		}
 	case `threadReport`:
-		thread.Report = append(thread.Report, request.User)
+		var exsitUser bool
+		for _, userName := range thread.Like {
+			if userName == request.User {
+				exsitUser = true
+			}
+		}
+		if exsitUser != true {
+			thread.Report = append(thread.Report, request.User)
+		}
 	case `threadHide`:
-		thread.Hide = append(thread.Hide, request.User)
+		var exsitUser bool
+		for _, userName := range thread.Like {
+			if userName == request.User {
+				exsitUser = true
+			}
+		}
+		if exsitUser != true {
+			thread.Hide = append(thread.Hide, request.User)
+		}
 		//update user info
 	}
 
 	//update change
 	err = bucket.Set(thread.Id, 0, thread)
 	if err != nil {
-		log.Fatalf("Failed to write data to the cluster (%s)\n", err)
+		log.Fatalf("Failed to re-write thread to change property (%s)\n", err)
 	}
 
-	log.Println(request)
+	defer bucket.Close()
 }
