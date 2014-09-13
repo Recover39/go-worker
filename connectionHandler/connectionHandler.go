@@ -10,7 +10,7 @@ import (
 	//_ "github.com/go-sql-driver/mysql"
 )
 
-var couchbaseURI = flag.String("couchbase", "http://10.73.45.71:8091/", "couchbase URI")
+var couchbaseURI = flag.String("couchbase", "http://localhost:8091/", "couchbase URI")
 
 type RabbitmqConsumer struct {
 	conn    *amqp.Connection

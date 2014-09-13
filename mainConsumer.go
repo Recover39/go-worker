@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	rabbitmqURI = flag.String("uri", "amqp://admin:password@125.209.193.216:5672/", "AMQP URI")
+	rabbitmqURI = flag.String("uri", "amqp://recover39:recover@125.209.193.216:5672/", "AMQP URI")
 	mainQueue   = flag.String("queue", "requestQueue", "main queue name")
 	//couchbaseURI = flag.String("couchbase", "http://125.209.198.141:8091/", "couchbase URI")
 )

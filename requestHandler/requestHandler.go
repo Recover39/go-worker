@@ -26,19 +26,20 @@ func RouteRequest(deliveries <-chan amqp.Delivery, done chan error) {
 
 		//route request
 		switch actionType.Action {
-		case `threadLike`, `threadUnlike`, `threadReport`, `threadHide`:
-			simpleThreadRequest(d.Body)
+		case `newThread`:
+			newThread(d.Body)
+
+		case `threadLike`, `threadUnlike`, `threadReport`, `threadBlock`:
+			threadRequestHandler(d.Body)
 
 		case `commentAdd`:
 			addComment(d.Body)
 
-		case `commentLike`, `commentUnlike`, `commentReport`, `commentHide`:
-			simpleCommentRequest(d.Body)
+		case `commentLike`, `commentUnlike`, `commentReport`, `commentBlock`:
+			commentRequestHandler(d.Body)
 
-		case `newThread`:
-			//newThread(d.Body, true)
-		case `newThread_textOnly`:
-			newThread(d.Body)
+		case `friendAdd`, `friendDelete`:
+		case `userRegister`:
 
 		default:
 			log.Printf("unknown actionType")
@@ -49,6 +50,30 @@ func RouteRequest(deliveries <-chan amqp.Delivery, done chan error) {
 
 	log.Printf("handle: deliveries channel closed")
 	done <- nil
+}
+
+func registerUser(msg []byte) {
+	var newUser dataType.User
+	err := json.Unmarshal(msg, &newUser)
+	if err != nil {
+		log.Println("error:", err)
+	}
+
+	bucket, err := connectionHandler.GetBucket("User")
+	if err != nil {
+		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+	}
+
+	added, err := bucket.Add(newUser.Id, 0, newUser)
+	if err != nil {
+		log.Fatalf("Failed to register new user (%s)\n", err)
+	}
+
+	if !added {
+		log.Fatalf("A User with the same id of (%s) already exists.\n", newUser.Id)
+	}
+
+	defer bucket.Close()
 }
 
 func increaseBucketKey(bucketName string) string {
@@ -81,12 +106,12 @@ func newThread(msg []byte) {
 	// need to set
 	// thread.Reader
 
-	bucket, err := connectionHandler.GetBucket("Thread")
+	threadBucket, err := connectionHandler.GetBucket("Thread")
 	if err != nil {
 		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
-	added, err := bucket.Add(thread.Id, 0, thread)
+	added, err := threadBucket.Add(thread.Id, 0, thread)
 	if err != nil {
 		log.Fatalf("Failed to write new thread (%s)\n", err)
 	}
@@ -95,13 +120,27 @@ func newThread(msg []byte) {
 		log.Fatalf("A Thread with the same id of (%s) already exists.\n", thread.Id)
 	}
 
-	var test dataType.Thread
+	var user dataType.User
 
-	err = bucket.Get(thread.Id, &test)
+	userBucket, err := connectionHandler.GetBucket("User")
+	if err != nil {
+		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+	}
+	err = userBucket.Get(thread.Author, &user)
+	if err != nil {
+		log.Fatalf("Failed to get user to add writeThread (%s)\n", err)
+	}
 
-	log.Printf("Got back a user with a name of (%s) and id (%s)\n", test.Id, test.Author)
+	user.WriteThread = append(user.WriteThread, thread.Id)
 
-	defer bucket.Close()
+	//update change
+	err = userBucket.Set(user.Id, 0, user)
+	if err != nil {
+		log.Fatalf("Failed to re-write user to add writeThread (%s)\n", err)
+	}
+
+	defer threadBucket.Close()
+	defer userBucket.Close()
 }
 
 func addComment(msg []byte) {
@@ -144,11 +183,31 @@ func addComment(msg []byte) {
 		log.Fatalf("Failed to re-write thread to add comment (%s)\n", err)
 	}
 
+	var user dataType.User
+
+	userBucket, err := connectionHandler.GetBucket("User")
+	if err != nil {
+		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+	}
+	err = userBucket.Get(comment.Author, &user)
+	if err != nil {
+		log.Fatalf("Failed to get user to add writeComment (%s)\n", err)
+	}
+
+	user.WriteComment = append(user.WriteComment, comment.Id)
+
+	//update change
+	err = userBucket.Set(user.Id, 0, user)
+	if err != nil {
+		log.Fatalf("Failed to re-write user to add writeComment (%s)\n", err)
+	}
+
 	defer commentBucket.Close()
 	defer threadBucket.Close()
+	defer userBucket.Close()
 }
 
-func simpleThreadRequest(msg []byte) {
+func threadRequestHandler(msg []byte) {
 	var request dataType.ThreadRequest
 	err := json.Unmarshal(msg, &request)
 	if err != nil {
@@ -178,6 +237,28 @@ func simpleThreadRequest(msg []byte) {
 		if exsitUser != true {
 			thread.Like = append(thread.Like, request.User)
 		}
+
+		var user dataType.User
+
+		userBucket, err := connectionHandler.GetBucket("User")
+		if err != nil {
+			log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		}
+		err = userBucket.Get(request.User, &user)
+		if err != nil {
+			log.Fatalf("Failed to get user to add likeThread (%s)\n", err)
+		}
+
+		user.LikeThread = append(user.LikeThread, request.Thread_id)
+
+		//update change
+		err = userBucket.Set(user.Id, 0, user)
+		if err != nil {
+			log.Fatalf("Failed to re-write user to add likeThread (%s)\n", err)
+		}
+
+		defer userBucket.Close()
+
 	case `threadUnlike`:
 		for i, userName := range thread.Like {
 			if userName == request.User {
@@ -187,7 +268,7 @@ func simpleThreadRequest(msg []byte) {
 		}
 	case `threadReport`:
 		var exsitUser bool
-		for _, userName := range thread.Like {
+		for _, userName := range thread.Report {
 			if userName == request.User {
 				exsitUser = true
 			}
@@ -195,23 +276,112 @@ func simpleThreadRequest(msg []byte) {
 		if exsitUser != true {
 			thread.Report = append(thread.Report, request.User)
 		}
-	case `threadHide`:
+	case `threadBlock`:
 		var exsitUser bool
-		for _, userName := range thread.Like {
+		for _, userName := range thread.Block {
 			if userName == request.User {
 				exsitUser = true
 			}
 		}
 		if exsitUser != true {
-			thread.Hide = append(thread.Hide, request.User)
+			thread.Block = append(thread.Block, request.User)
 		}
-		//update user info
+
+		var user dataType.User
+
+		userBucket, err := connectionHandler.GetBucket("User")
+		if err != nil {
+			log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		}
+		err = userBucket.Get(request.User, &user)
+		if err != nil {
+			log.Fatalf("Failed to get user to add blockUser (%s)\n", err)
+		}
+
+		///////////////
+		user.BlockUser = append(user.BlockUser, request.Thread_id)
+
+		//update change
+		err = userBucket.Set(user.Id, 0, user)
+		if err != nil {
+			log.Fatalf("Failed to re-write user to add blockUser (%s)\n", err)
+		}
+
+		defer userBucket.Close()
 	}
 
 	//update change
 	err = bucket.Set(thread.Id, 0, thread)
 	if err != nil {
 		log.Fatalf("Failed to re-write thread to change property (%s)\n", err)
+	}
+
+	defer bucket.Close()
+}
+
+func commentRequestHandler(msg []byte) {
+	var request dataType.CommentRequest
+	err := json.Unmarshal(msg, &request)
+	if err != nil {
+		log.Println("error:", err)
+	}
+
+	var comment dataType.Comment
+
+	bucket, err := connectionHandler.GetBucket("Comment")
+	if err != nil {
+		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+	}
+
+	err = bucket.Get(request.Comment_id, &comment)
+	if err != nil {
+		log.Fatalf("Failed to get comment to change property (%s)\n", err)
+	}
+
+	switch request.Action {
+	case `commentLike`:
+		var exsitUser bool
+		for _, userName := range comment.Like {
+			if userName == request.User {
+				exsitUser = true
+			}
+		}
+		if exsitUser != true {
+			comment.Like = append(comment.Like, request.User)
+		}
+	case `commentUnlike`:
+		for i, userName := range comment.Like {
+			if userName == request.User {
+				comment.Like = append(comment.Like[:i], comment.Like[i+1:]...)
+				break
+			}
+		}
+	case `commentReport`:
+		var exsitUser bool
+		for _, userName := range comment.Report {
+			if userName == request.User {
+				exsitUser = true
+			}
+		}
+		if exsitUser != true {
+			comment.Report = append(comment.Report, request.User)
+		}
+	case `commentBlock`:
+		var exsitUser bool
+		for _, userName := range comment.Block {
+			if userName == request.User {
+				exsitUser = true
+			}
+		}
+		if exsitUser != true {
+			comment.Block = append(comment.Block, request.User)
+		}
+	}
+
+	//update change
+	err = bucket.Set(comment.Id, 0, comment)
+	if err != nil {
+		log.Fatalf("Failed to re-write comment to change property (%s)\n", err)
 	}
 
 	defer bucket.Close()
