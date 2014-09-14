@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/streadway/amqp"
 	"log"
+	"sort"
 	"strconv"
 	//"database/sql"
 	//_ "github.com/go-sql-driver/mysql"
@@ -79,6 +80,16 @@ func registerUser(msg []byte) {
 	defer bucket.Close()
 }
 
+/////////for sorting
+
+type ByString []string
+
+func (a ByString) Len() int           { return len(a) }
+func (a ByString) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByString) Less(i, j int) bool { return a[i] < a[j] }
+
+/////////for sorting
+
 func friendRelationHandler(msg []byte) {
 	var request dataType.UserRequest
 	err := json.Unmarshal(msg, &request)
@@ -105,7 +116,7 @@ func friendRelationHandler(msg []byte) {
 	switch request.Action {
 	case `friendAdd`:
 		for _, friend_id := range request.FriendList {
-			user.Follower = append(user.Follower, friend_id)
+			user.Following = append(user.Following, friend_id)
 
 			var friend dataType.User
 			err = userBucket.Get(friend_id, &friend)
@@ -113,7 +124,7 @@ func friendRelationHandler(msg []byte) {
 				log.Fatalf("Failed to get user to change property (%s)\n", err)
 			}
 
-			friend.Following = append(friend.Following, user.Id)
+			friend.Follower = append(friend.Follower, user.Id)
 
 			//update change
 			err = userBucket.Set(friend.Id, 0, friend)
@@ -123,23 +134,23 @@ func friendRelationHandler(msg []byte) {
 		}
 	case `friendDelete`:
 		for _, friend_id := range request.FriendList {
-			for i, userFollower := range user.Follower {
-				if userFollower == friend_id {
-					user.Follower = append(user.Follower[:i], user.Follower[i+1:]...)
+			for i, userFollowing := range user.Following {
+				if userFollowing == friend_id {
+					user.Following = append(user.Following[:i], user.Following[i+1:]...)
 					break
 				}
 			}
 
 			var friend dataType.User
-			/////////친구의 팔로잉 제
+			/////////친구의 팔로잉 제거
 			err = userBucket.Get(friend_id, &friend)
 			if err != nil {
 				log.Fatalf("Failed to get user to change property (%s)\n", err)
 			}
 
-			for i, friendFollowing := range friend.Following {
-				if friendFollowing == friend_id {
-					friend.Following = append(friend.Following[:i], friend.Following[i+1:]...)
+			for i, friendFollower := range friend.Follower {
+				if friendFollower == friend_id {
+					friend.Follower = append(friend.Follower[:i], friend.Follower[i+1:]...)
 					break
 				}
 			}
@@ -149,6 +160,38 @@ func friendRelationHandler(msg []byte) {
 			if err != nil {
 				log.Fatalf("Failed to re-write user to add writeThread (%s)\n", err)
 			}
+		}
+	}
+
+	///////////////friend 동기화
+	// 0. 소팅
+	sort.Sort(ByString(user.Following))
+	sort.Sort(ByString(user.Follower))
+	// 1. 중복제거
+	for i, listUser := range user.Following {
+		if user.Following[i] == user.Following[i+1] {
+			user.Following = append(user.Following[:i], user.Following[i+1:]...)
+		}
+	}
+	for i, listUser := range user.Follower {
+		if user.Follower[i] == user.Follower[i+1] {
+			user.Follower = append(user.Follower[:i], user.Follower[i+1:]...)
+		}
+	}
+	// 2. friend 리스트 만들기
+	i := 0
+	j := 0
+	user.Friend = user.Friend[:0]
+
+	for i < len(user.Follower) && j < len(user.Following) {
+		if user.Follower[i] > user.Following[j] {
+			j++
+		} else if user.Follower[i] < user.Following[j] {
+			i++
+		} else {
+			user.Friend = append(user.Friend, user.Follower[i])
+			i++
+			j++
 		}
 	}
 
@@ -185,10 +228,7 @@ func newThread(msg []byte) {
 		log.Println("error:", err)
 	}
 
-	//fill thread property
 	thread.Id = increaseBucketKey("Thread")
-	// need to set
-	// thread.Reader
 
 	threadBucket, err := connectionHandler.GetBucket("Thread")
 	if err != nil {
@@ -216,6 +256,21 @@ func newThread(msg []byte) {
 	}
 
 	user.WriteThread = append(user.WriteThread, thread.Id)
+
+	for _, friend_id := range user.Friends {
+		var friend dataType.User
+		err = userBucket.Get(friend_id, &friend)
+		if err != nil {
+			log.Fatalf("Failed to get user to add unreadThread (%s)\n", err)
+		}
+
+		friend.UnreadThread = append(friend.UnreadThread, thread.Id)
+
+		err = userBucket.Set(friend.Id, 0, friend)
+		if err != nil {
+			log.Fatalf("Failed to re-write friend to add UnreadThread (%s)\n", err)
+		}
+	}
 
 	//update change
 	err = userBucket.Set(user.Id, 0, user)
