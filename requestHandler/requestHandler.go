@@ -168,12 +168,12 @@ func friendRelationHandler(msg []byte) {
 	sort.Sort(ByString(user.Following))
 	sort.Sort(ByString(user.Follower))
 	// 1. 중복제거
-	for i, listUser := range user.Following {
+	for i, _ := range user.Following {
 		if user.Following[i] == user.Following[i+1] {
 			user.Following = append(user.Following[:i], user.Following[i+1:]...)
 		}
 	}
-	for i, listUser := range user.Follower {
+	for i, _ := range user.Follower {
 		if user.Follower[i] == user.Follower[i+1] {
 			user.Follower = append(user.Follower[:i], user.Follower[i+1:]...)
 		}
@@ -181,7 +181,7 @@ func friendRelationHandler(msg []byte) {
 	// 2. friend 리스트 만들기
 	i := 0
 	j := 0
-	user.Friend = user.Friend[:0]
+	user.Friends = user.Friends[:0]
 
 	for i < len(user.Follower) && j < len(user.Following) {
 		if user.Follower[i] > user.Following[j] {
@@ -189,7 +189,7 @@ func friendRelationHandler(msg []byte) {
 		} else if user.Follower[i] < user.Following[j] {
 			i++
 		} else {
-			user.Friend = append(user.Friend, user.Follower[i])
+			user.Friends = append(user.Friends, user.Follower[i])
 			i++
 			j++
 		}
