@@ -168,16 +168,28 @@ func friendRelationHandler(msg []byte) {
 	sort.Sort(ByString(user.Following))
 	sort.Sort(ByString(user.Follower))
 	// 1. 중복제거
+	var tempList []string
+
 	for i, _ := range user.Following {
-		if user.Following[i] == user.Following[i+1] {
-			user.Following = append(user.Following[:i], user.Following[i+1:]...)
+		if i != len(user.Following)-1 && user.Following[i] == user.Following[i+1] {
+			tempList = append(tempList, user.Following[i])
+		} else if len(user.Following) == 1 {
+			tempList = append(tempList, user.Following[i])
 		}
 	}
+	user.Following = tempList
+
+	tempList = tempList[:0]
+
 	for i, _ := range user.Follower {
-		if user.Follower[i] == user.Follower[i+1] {
-			user.Follower = append(user.Follower[:i], user.Follower[i+1:]...)
+		if i != len(user.Follower)-1 && user.Follower[i] == user.Follower[i+1] {
+			tempList = append(tempList, user.Follower[i])
+		} else if len(user.Follower) == 1 {
+			tempList = append(tempList, user.Follower[i])
 		}
 	}
+	user.Follower = tempList
+
 	// 2. friend 리스트 만들기
 	i := 0
 	j := 0
@@ -190,6 +202,19 @@ func friendRelationHandler(msg []byte) {
 			i++
 		} else {
 			user.Friends = append(user.Friends, user.Follower[i])
+
+			var friend dataType.User
+			userBucket.Get(user.Follower[i], &friend)
+			if err != nil {
+				log.Print("Failed to get friend to add User as friend (%s)\n", err)
+			}
+			friend.Friends = append(friend.Friends, user.Id)
+
+			err = userBucket.Set(friend.Id, 0, friend)
+			if err != nil {
+				log.Fatalf("Failed to re-write friend to add User as friend (%s)\n", err)
+			}
+
 			i++
 			j++
 		}
