@@ -2,6 +2,7 @@ package dataType
 
 type User struct {
 	Id           string
+	RegisterDate int64    `json:"registerDate"`
 	Friends      []string `json:"friends"`
 	Follower     []string `json:"follower"`
 	Following    []string `json:"following"`
@@ -37,6 +38,13 @@ type Comment struct {
 	Block     []string `json:"blocks"`
 	Content   string   `json:"content"`
 	Time      int64    `json:"pub_date"`
+}
+
+type UserRequest struct {
+	User       string   `json:"user"`
+	FriendList []string `json:"friendList"`
+	Action     string   `json:"action"`
+	Time       int64    `json:"time"`
 }
 
 type ThreadRequest struct {

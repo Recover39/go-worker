@@ -39,6 +39,7 @@ func RouteRequest(deliveries <-chan amqp.Delivery, done chan error) {
 			commentRequestHandler(d.Body)
 
 		case `friendAdd`, `friendDelete`:
+			friendRelationHandler(d.Body)
 
 		case `userRegister`:
 			registerUser(d.Body)
@@ -76,6 +77,87 @@ func registerUser(msg []byte) {
 	}
 
 	defer bucket.Close()
+}
+
+func friendRelationHandler(msg []byte) {
+	var request dataType.UserRequest
+	err := json.Unmarshal(msg, &request)
+	if err != nil {
+		log.Println("error:", err)
+	}
+
+	///////////////////
+
+	var user dataType.User
+
+	userBucket, err := connectionHandler.GetBucket("User")
+	if err != nil {
+		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+	}
+
+	err = userBucket.Get(request.User, &user)
+	if err != nil {
+		log.Fatalf("Failed to get user to change property (%s)\n", err)
+	}
+
+	///////////////////
+
+	switch request.Action {
+	case `friendAdd`:
+		for _, friend_id := range request.FriendList {
+			user.Follower = append(user.Follower, friend_id)
+
+			var friend dataType.User
+			err = userBucket.Get(friend_id, &friend)
+			if err != nil {
+				log.Fatalf("Failed to get user to change property (%s)\n", err)
+			}
+
+			friend.Following = append(friend.Following, user.Id)
+
+			//update change
+			err = userBucket.Set(friend.Id, 0, friend)
+			if err != nil {
+				log.Fatalf("Failed to re-write user to add writeThread (%s)\n", err)
+			}
+		}
+	case `friendDelete`:
+		for _, friend_id := range request.FriendList {
+			for i, userFollower := range user.Follower {
+				if userFollower == friend_id {
+					user.Follower = append(user.Follower[:i], user.Follower[i+1:]...)
+					break
+				}
+			}
+
+			var friend dataType.User
+			/////////친구의 팔로잉 제
+			err = userBucket.Get(friend_id, &friend)
+			if err != nil {
+				log.Fatalf("Failed to get user to change property (%s)\n", err)
+			}
+
+			for i, friendFollowing := range friend.Following {
+				if friendFollowing == friend_id {
+					friend.Following = append(friend.Following[:i], friend.Following[i+1:]...)
+					break
+				}
+			}
+
+			//update change
+			err = userBucket.Set(friend.Id, 0, friend)
+			if err != nil {
+				log.Fatalf("Failed to re-write user to add writeThread (%s)\n", err)
+			}
+		}
+	}
+
+	err = userBucket.Set(user.Id, 0, user)
+	if err != nil {
+		log.Fatalf("Failed to re-write user to add writeThread (%s)\n", err)
+	}
+
+	defer userBucket.Close()
 }
 
 func increaseBucketKey(bucketName string) string {
