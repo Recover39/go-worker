@@ -49,7 +49,7 @@ func RouteRequest(deliveries <-chan amqp.Delivery, done chan error) {
 			log.Printf("unknown actionType")
 		}
 
-		d.Ack(false)
+		defer d.Ack(false)
 	}
 
 	log.Printf("handle: deliveries channel closed")
@@ -65,16 +65,16 @@ func registerUser(msg []byte) {
 
 	bucket, err := connectionHandler.GetBucket("User")
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
 	added, err := bucket.Add(newUser.Id, 0, newUser)
 	if err != nil {
-		log.Fatalf("Failed to register new user (%s)\n", err)
+		log.Printf("Failed to register new user (%s)\n", err)
 	}
 
 	if !added {
-		log.Fatalf("A User with the same id of (%s) already exists.\n", newUser.Id)
+		log.Printf("A User with the same id of (%s) already exists.\n", newUser.Id)
 	}
 
 	defer bucket.Close()
@@ -103,12 +103,12 @@ func friendRelationHandler(msg []byte) {
 
 	userBucket, err := connectionHandler.GetBucket("User")
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
 	err = userBucket.Get(request.User, &user)
 	if err != nil {
-		log.Fatalf("Failed to get user to change property (%s)\n", err)
+		log.Printf("Failed to get user to change property (%s)\n", err)
 	}
 
 	///////////////////
@@ -121,7 +121,7 @@ func friendRelationHandler(msg []byte) {
 			var friend dataType.User
 			err = userBucket.Get(friend_id, &friend)
 			if err != nil {
-				log.Fatalf("Failed to get user to change property (%s)\n", err)
+				log.Printf("Failed to get user to change property (%s)\n", err)
 			}
 
 			friend.Follower = append(friend.Follower, user.Id)
@@ -129,7 +129,7 @@ func friendRelationHandler(msg []byte) {
 			//update change
 			err = userBucket.Set(friend.Id, 0, friend)
 			if err != nil {
-				log.Fatalf("Failed to re-write user to add writeThread (%s)\n", err)
+				log.Printf("Failed to re-write user to add writeThread (%s)\n", err)
 			}
 		}
 	case `friendDelete`:
@@ -145,7 +145,7 @@ func friendRelationHandler(msg []byte) {
 			/////////친구의 팔로잉 제거
 			err = userBucket.Get(friend_id, &friend)
 			if err != nil {
-				log.Fatalf("Failed to get user to change property (%s)\n", err)
+				log.Printf("Failed to get user to change property (%s)\n", err)
 			}
 
 			for i, friendFollower := range friend.Follower {
@@ -158,7 +158,7 @@ func friendRelationHandler(msg []byte) {
 			//update change
 			err = userBucket.Set(friend.Id, 0, friend)
 			if err != nil {
-				log.Fatalf("Failed to re-write user to add writeThread (%s)\n", err)
+				log.Printf("Failed to re-write user to add writeThread (%s)\n", err)
 			}
 		}
 	}
@@ -212,7 +212,7 @@ func friendRelationHandler(msg []byte) {
 
 			err = userBucket.Set(friend.Id, 0, friend)
 			if err != nil {
-				log.Fatalf("Failed to re-write friend to add User as friend (%s)\n", err)
+				log.Printf("Failed to re-write friend to add User as friend (%s)\n", err)
 			}
 
 			i++
@@ -222,7 +222,7 @@ func friendRelationHandler(msg []byte) {
 
 	err = userBucket.Set(user.Id, 0, user)
 	if err != nil {
-		log.Fatalf("Failed to re-write user to add writeThread (%s)\n", err)
+		log.Printf("Failed to re-write user to add writeThread (%s)\n", err)
 	}
 
 	defer userBucket.Close()
@@ -231,14 +231,14 @@ func friendRelationHandler(msg []byte) {
 func increaseBucketKey(bucketName string) string {
 	bucket, err := connectionHandler.GetBucket(bucketName)
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
 	bucketKey := bucketName + "Num"
 
 	key, err := bucket.Incr(bucketKey, 1, 1, 0)
 	if err != nil {
-		log.Fatalf("Failed to get bucketKey (%s)\n", err)
+		log.Printf("Failed to get bucketKey (%s)\n", err)
 	}
 
 	defer bucket.Close()
@@ -257,27 +257,27 @@ func newThread(msg []byte) {
 
 	threadBucket, err := connectionHandler.GetBucket("Thread")
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
 	added, err := threadBucket.Add(thread.Id, 0, thread)
 	if err != nil {
-		log.Fatalf("Failed to write new thread (%s)\n", err)
+		log.Printf("Failed to write new thread (%s)\n", err)
 	}
 
 	if !added {
-		log.Fatalf("A Thread with the same id of (%s) already exists.\n", thread.Id)
+		log.Printf("A Thread with the same id of (%s) already exists.\n", thread.Id)
 	}
 
 	var user dataType.User
 
 	userBucket, err := connectionHandler.GetBucket("User")
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 	err = userBucket.Get(thread.Author, &user)
 	if err != nil {
-		log.Fatalf("Failed to get user to add writeThread (%s)\n", err)
+		log.Printf("Failed to get user to add writeThread (%s)\n", err)
 	}
 
 	user.WriteThread = append(user.WriteThread, thread.Id)
@@ -286,21 +286,21 @@ func newThread(msg []byte) {
 		var friend dataType.User
 		err = userBucket.Get(friend_id, &friend)
 		if err != nil {
-			log.Fatalf("Failed to get user to add unreadThread (%s)\n", err)
+			log.Printf("Failed to get user to add unreadThread (%s)\n", err)
 		}
 
 		friend.UnreadThread = append(friend.UnreadThread, thread.Id)
 
 		err = userBucket.Set(friend.Id, 0, friend)
 		if err != nil {
-			log.Fatalf("Failed to re-write friend to add UnreadThread (%s)\n", err)
+			log.Printf("Failed to re-write friend to add UnreadThread (%s)\n", err)
 		}
 	}
 
 	//update change
 	err = userBucket.Set(user.Id, 0, user)
 	if err != nil {
-		log.Fatalf("Failed to re-write user to add writeThread (%s)\n", err)
+		log.Printf("Failed to re-write user to add writeThread (%s)\n", err)
 	}
 
 	defer threadBucket.Close()
@@ -318,25 +318,25 @@ func addComment(msg []byte) {
 
 	commentBucket, err := connectionHandler.GetBucket("Comment")
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 	added, err := commentBucket.Add(comment.Id, 0, comment)
 	if err != nil {
-		log.Fatalf("Failed to write new comment (%s)\n", err)
+		log.Printf("Failed to write new comment (%s)\n", err)
 	}
 	if !added {
-		log.Fatalf("A Comment with the same id of (%s) already exists.\n", comment.Id)
+		log.Printf("A Comment with the same id of (%s) already exists.\n", comment.Id)
 	}
 
 	var thread dataType.Thread
 
 	threadBucket, err := connectionHandler.GetBucket("Thread")
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 	err = threadBucket.Get(comment.Thread_id, &thread)
 	if err != nil {
-		log.Fatalf("Failed to get thread to add comment (%s)\n", err)
+		log.Printf("Failed to get thread to add comment (%s)\n", err)
 	}
 
 	thread.Comment = append(thread.Comment, comment.Id)
@@ -344,18 +344,18 @@ func addComment(msg []byte) {
 	//update change
 	err = threadBucket.Set(thread.Id, 0, thread)
 	if err != nil {
-		log.Fatalf("Failed to re-write thread to add comment (%s)\n", err)
+		log.Printf("Failed to re-write thread to add comment (%s)\n", err)
 	}
 
 	var user dataType.User
 
 	userBucket, err := connectionHandler.GetBucket("User")
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 	err = userBucket.Get(comment.Author, &user)
 	if err != nil {
-		log.Fatalf("Failed to get user to add writeComment (%s)\n", err)
+		log.Printf("Failed to get user to add writeComment (%s)\n", err)
 	}
 
 	user.WriteComment = append(user.WriteComment, comment.Id)
@@ -363,7 +363,7 @@ func addComment(msg []byte) {
 	//update change
 	err = userBucket.Set(user.Id, 0, user)
 	if err != nil {
-		log.Fatalf("Failed to re-write user to add writeComment (%s)\n", err)
+		log.Printf("Failed to re-write user to add writeComment (%s)\n", err)
 	}
 
 	defer commentBucket.Close()
@@ -384,12 +384,12 @@ func threadRequestHandler(msg []byte) {
 
 	userBucket, err := connectionHandler.GetBucket("User")
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
 	err = userBucket.Get(request.User, &user)
 	if err != nil {
-		log.Fatalf("Failed to get user to change property (%s)\n", err)
+		log.Printf("Failed to get user to change property (%s)\n", err)
 	}
 
 	/////////////////
@@ -398,12 +398,12 @@ func threadRequestHandler(msg []byte) {
 
 	threadBucket, err := connectionHandler.GetBucket("Thread")
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
 	err = threadBucket.Get(request.Thread_id, &thread)
 	if err != nil {
-		log.Fatalf("Failed to get thread to change property (%s)\n", err)
+		log.Printf("Failed to get thread to change property (%s)\n", err)
 	}
 
 	switch request.Action {
@@ -477,12 +477,12 @@ func threadRequestHandler(msg []byte) {
 	//update change
 	err = threadBucket.Set(thread.Id, 0, thread)
 	if err != nil {
-		log.Fatalf("Failed to re-write thread to change property (%s)\n", err)
+		log.Printf("Failed to re-write thread to change property (%s)\n", err)
 	}
 
 	err = userBucket.Set(user.Id, 0, user)
 	if err != nil {
-		log.Fatalf("Failed to re-write user to add likeThread (%s)\n", err)
+		log.Printf("Failed to re-write user to add likeThread (%s)\n", err)
 	}
 
 	defer threadBucket.Close()
@@ -502,12 +502,12 @@ func commentRequestHandler(msg []byte) {
 
 	userBucket, err := connectionHandler.GetBucket("User")
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
 	err = userBucket.Get(request.User, &user)
 	if err != nil {
-		log.Fatalf("Failed to get user to change property (%s)\n", err)
+		log.Printf("Failed to get user to change property (%s)\n", err)
 	}
 
 	/////////////////
@@ -516,12 +516,12 @@ func commentRequestHandler(msg []byte) {
 
 	commentBucket, err := connectionHandler.GetBucket("Comment")
 	if err != nil {
-		log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
+		log.Printf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
 	err = commentBucket.Get(request.Comment_id, &comment)
 	if err != nil {
-		log.Fatalf("Failed to get comment to change property (%s)\n", err)
+		log.Printf("Failed to get comment to change property (%s)\n", err)
 	}
 
 	/////////////////
@@ -597,12 +597,12 @@ func commentRequestHandler(msg []byte) {
 	//update change
 	err = commentBucket.Set(comment.Id, 0, comment)
 	if err != nil {
-		log.Fatalf("Failed to re-write comment to change property (%s)\n", err)
+		log.Printf("Failed to re-write comment to change property (%s)\n", err)
 	}
 
 	err = userBucket.Set(user.Id, 0, user)
 	if err != nil {
-		log.Fatalf("Failed to re-write user to change property (%s)\n", err)
+		log.Printf("Failed to re-write user to change property (%s)\n", err)
 	}
 
 	defer commentBucket.Close()

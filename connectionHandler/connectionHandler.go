@@ -31,12 +31,12 @@ func CreateCouchbaseConn(address string) (Couch, error) {
 	log.Printf("connecting to %q for couchbase", address)
 	conn, err := couchbase.Connect(address)
 	if err != nil {
-		return Couch{}, fmt.Errorf("Error getting connection: %s", err)
+		return Couch{}, log.Fatalf("Error getting connection: %s", err)
 	}
 
 	pool, err := conn.GetPool("default")
 	if err != nil {
-		return Couch{}, fmt.Errorf("Error getting pool:  %s", err)
+		return Couch{}, log.Fatalf("Error getting pool:  %s", err)
 	}
 
 	couchConn.conn = &conn
@@ -50,17 +50,17 @@ func GetBucket(bucketname string) (*couchbase.Bucket, error) {
 	conn, err := couchbase.Connect(*couchbaseURI)
 	if err != nil {
 		//log.Println("Make sure that couchbase is at", couchbaseURI)
-		return nil, fmt.Errorf("Error getting connection: %s", err)
+		return nil, log.Fatalf("Error getting connection: %s", err)
 	}
 
 	pool, err := conn.GetPool("default")
 	if err != nil {
-		return nil, fmt.Errorf("Error getting pool:  %s", err)
+		return nil, log.Fatalf("Error getting pool:  %s", err)
 	}
 
 	bucket, err := pool.GetBucket(bucketname)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to get bucket from couchbase (%s)\n", err)
+		return nil, log.Fatalf("Failed to get bucket from couchbase (%s)\n", err)
 	}
 
 	return bucket, nil
@@ -78,7 +78,7 @@ func CreateRabbitmqConsumer(amqpURI, queueName string, deliverFunc rabbitmqHandl
 	log.Printf("dialing %q", amqpURI)
 	c.conn, err = amqp.Dial(amqpURI)
 	if err != nil {
-		return nil, fmt.Errorf("Dial: %s", err)
+		return nil, log.Fatalf("Dial: %s", err)
 	}
 
 	go func() {
@@ -88,7 +88,7 @@ func CreateRabbitmqConsumer(amqpURI, queueName string, deliverFunc rabbitmqHandl
 	log.Printf("got Connection, getting Channel")
 	c.channel, err = c.conn.Channel()
 	if err != nil {
-		return nil, fmt.Errorf("Channel: %s", err)
+		return nil, log.Fatalf("Channel: %s", err)
 	}
 
 	queue, err := c.channel.QueueDeclare(
@@ -100,7 +100,7 @@ func CreateRabbitmqConsumer(amqpURI, queueName string, deliverFunc rabbitmqHandl
 		nil,       // arguments
 	)
 	if err != nil {
-		return nil, fmt.Errorf("Queue Declare: %s", err)
+		return nil, log.Fatalf("Queue Declare: %s", err)
 	}
 
 	log.Printf("declared Queue : %q ", queue.Name)
@@ -115,7 +115,7 @@ func CreateRabbitmqConsumer(amqpURI, queueName string, deliverFunc rabbitmqHandl
 		nil,        // arguments
 	)
 	if err != nil {
-		return nil, fmt.Errorf("Queue Consume: %s", err)
+		return nil, log.Fatalf("Queue Consume: %s", err)
 	}
 
 	go deliverFunc(deliveries, c.done)
@@ -126,7 +126,7 @@ func CreateRabbitmqConsumer(amqpURI, queueName string, deliverFunc rabbitmqHandl
 func (c *RabbitmqConsumer) RabbitmqShutdown() error {
 	// will close() the deliveries channel
 	if err := c.conn.Close(); err != nil {
-		return fmt.Errorf("AMQP connection close error: %s", err)
+		return log.Printf("AMQP connection close error: %s", err)
 	}
 
 	defer log.Printf("AMQP shutdown OK")
