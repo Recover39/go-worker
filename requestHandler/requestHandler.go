@@ -173,7 +173,7 @@ func friendRelationHandler(msg []byte) {
 	for i, _ := range user.Following {
 		if i != len(user.Following)-1 && user.Following[i] == user.Following[i+1] {
 			tempList = append(tempList, user.Following[i])
-		} else if len(user.Following) == 1 {
+		} else if len(user.Following)-1 == i {
 			tempList = append(tempList, user.Following[i])
 		}
 	}
@@ -184,7 +184,7 @@ func friendRelationHandler(msg []byte) {
 	for i, _ := range user.Follower {
 		if i != len(user.Follower)-1 && user.Follower[i] == user.Follower[i+1] {
 			tempList = append(tempList, user.Follower[i])
-		} else if len(user.Follower) == 1 {
+		} else if len(user.Follower)-1 == i {
 			tempList = append(tempList, user.Follower[i])
 		}
 	}
